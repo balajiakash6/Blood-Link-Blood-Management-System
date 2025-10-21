@@ -1,0 +1,380 @@
+import javax.swing.*;
+import javax.swing.border.*;
+import javax.swing.table.DefaultTableModel;
+import java.awt.*;
+import java.awt.event.*;
+import java.sql.*;
+
+public class TamilNaduBloodLinkSQLite extends JFrame {
+
+    private JTabbedPane tabs;
+    private Connection conn;
+
+    private static final Color PRIMARY_RED = new Color(185, 0, 0);
+    private static final Color ACCENT_RED = new Color(255, 69, 0);
+    private static final Color BACKGROUND_LIGHT = new Color(250, 240, 240);
+
+    private static final String[] TN_DISTRICTS = {
+            "", "Ariyalur", "Chengalpattu", "Chennai", "Coimbatore", "Cuddalore",
+            "Dharmapuri", "Dindigul", "Erode", "Kallakurichi", "Kanchipuram",
+            "Karur", "Krishnagiri", "Madurai", "Mayiladuthurai", "Nagapattinam",
+            "Kanyakumari", "Namakkal", "Perambalur", "Pudukkottai", "Ramanathapuram",
+            "Ranipet", "Salem", "Sivaganga", "Tenkasi", "Thanjavur", "Theni",
+            "Tiruvallur", "Tiruvarur", "Thoothukudi", "Tiruchirappalli",
+            "Tirunelveli", "Tirupathur", "Tiruppur", "Tiruvannamalai",
+            "The Nilgiris", "Vellore", "Viluppuram", "Virudhunagar"
+    };
+
+    private static final int LOGIN_TAB_INDEX = 1;
+    private static final int DONOR_REGISTRATION_TAB_INDEX = 2;
+
+    
+    private static final String DB_URL = "jdbc:sqlite:bloodlink.db";
+
+    public TamilNaduBloodLinkSQLite() {
+        setTitle("🩸 Tamil Nadu BloodLink - SQLite Version");
+        getContentPane().setBackground(BACKGROUND_LIGHT);
+        setDefaultCloseOperation(EXIT_ON_CLOSE);
+        setSize(1000, 700);
+        setLocationRelativeTo(null);
+
+        connectDB();
+        createTablesIfNotExists();
+
+        tabs = new JTabbedPane();
+        tabs.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        tabs.addTab("🏠 Start", createStyledPanel(startPanel(), BACKGROUND_LIGHT));
+        tabs.addTab("🔑 Login", createStyledPanel(loginPanel(), new Color(255, 240, 240)));
+        tabs.addTab("👤 Donor Registration", createStyledPanel(donorPanel(), new Color(255, 230, 230)));
+        tabs.addTab("🏥 Stock Management", createStyledPanel(hospitalStockPanel(), new Color(240, 255, 240)));
+        tabs.addTab("🔍 Donor Search", createStyledPanel(donorSearchPanel(), new Color(240, 240, 255)));
+
+        add(tabs);
+    }
+
+    private void connectDB() {
+        try {
+            Class.forName("org.sqlite.JDBC");
+            conn = DriverManager.getConnection(DB_URL);
+            System.out.println("✅ Connected to SQLite Database!");
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Database connection failed!\n" + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    private void createTablesIfNotExists() {
+        try (Statement st = conn.createStatement()) {
+            st.execute("CREATE TABLE IF NOT EXISTS donors (" +
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                    "name TEXT, username TEXT UNIQUE, password TEXT, " +
+                    "contact TEXT, district TEXT, bloodgroup TEXT)");
+            st.execute("CREATE TABLE IF NOT EXISTS blood_stock (" +
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                    "district TEXT, bloodgroup TEXT, units INTEGER, " +
+                    "UNIQUE(district, bloodgroup))");
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private JButton createButton(String text, Color color) {
+        JButton btn = new JButton(text);
+        btn.setBackground(color);
+        btn.setForeground(Color.WHITE);
+        btn.setFont(new Font("Segoe UI", Font.BOLD, 15));
+        btn.setFocusPainted(false);
+        btn.setBorder(new CompoundBorder(new LineBorder(color.darker(), 1, true),
+                new EmptyBorder(10, 24, 10, 24)));
+        btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        return btn;
+    }
+
+    private JLabel createHeader(String text) {
+        JLabel label = new JLabel(text, SwingConstants.CENTER);
+        label.setFont(new Font("Segoe UI", Font.BOLD, 24));
+        label.setForeground(PRIMARY_RED);
+        label.setBorder(new CompoundBorder(new EmptyBorder(10, 0, 15, 0),
+                new MatteBorder(0, 0, 3, 0, ACCENT_RED)));
+        return label;
+    }
+
+    private JPanel createStyledPanel(JPanel content, Color color) {
+        JPanel panel = new JPanel(new BorderLayout()) {
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2d = (Graphics2D) g;
+                GradientPaint gp = new GradientPaint(0, 0, color, getWidth(), getHeight(), Color.WHITE);
+                g2d.setPaint(gp);
+                g2d.fillRect(0, 0, getWidth(), getHeight());
+            }
+        };
+        panel.add(content, BorderLayout.CENTER);
+        return panel;
+    }
+
+    private JTextField createInputField() {
+        JTextField field = new JTextField(20);
+        field.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        field.setBorder(new CompoundBorder(new LineBorder(Color.LIGHT_GRAY, 1),
+                new EmptyBorder(8, 10, 8, 10)));
+        return field;
+    }
+
+    private JPanel createFormPanel(int rows, int cols) {
+        JPanel panel = new JPanel(new GridLayout(rows, cols, 15, 15));
+        panel.setOpaque(false);
+        panel.setBorder(new EmptyBorder(30, 100, 30, 100));
+        return panel;
+    }
+
+    private String[] bloodGroups() {
+        return new String[]{"", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"};
+    }
+
+    private JPanel startPanel() {
+        JPanel panel = new JPanel(new GridBagLayout());
+        panel.setOpaque(false);
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(20, 10, 20, 10);
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+
+        JLabel icon = new JLabel("💧", SwingConstants.CENTER);
+        icon.setFont(new Font("Segoe UI Symbol", Font.PLAIN, 150));
+        panel.add(icon, gbc);
+
+        gbc.gridy++;
+        JLabel title = new JLabel("Tamil Nadu BloodLink", SwingConstants.CENTER);
+        title.setFont(new Font("Segoe UI", Font.BOLD, 36));
+        title.setForeground(PRIMARY_RED);
+        panel.add(title, gbc);
+
+        gbc.gridy++;
+        JButton startBtn = createButton("Start", PRIMARY_RED);
+        startBtn.setPreferredSize(new Dimension(250, 60));
+        startBtn.addActionListener(e -> tabs.setSelectedIndex(LOGIN_TAB_INDEX));
+        panel.add(startBtn, gbc);
+
+        return panel;
+    }
+
+    private JPanel loginPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setOpaque(false);
+        panel.add(createHeader("🔑 User Login"), BorderLayout.NORTH);
+
+        JPanel form = createFormPanel(3, 2);
+        JTextField username = createInputField();
+        JPasswordField password = new JPasswordField();
+        password.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+
+        form.add(new JLabel("Username / Phone:"));
+        form.add(username);
+        form.add(new JLabel("Password:"));
+        form.add(password);
+
+        JButton loginBtn = createButton("Login", PRIMARY_RED);
+        loginBtn.addActionListener(e -> handleLogin(username.getText(), new String(password.getPassword())));
+
+        JButton registerLink = createButton("Register", ACCENT_RED);
+        registerLink.addActionListener(e -> tabs.setSelectedIndex(DONOR_REGISTRATION_TAB_INDEX));
+
+        form.add(loginBtn);
+        form.add(registerLink);
+        panel.add(form, BorderLayout.CENTER);
+
+        return panel;
+    }
+
+    private void handleLogin(String user, String pass) {
+        try {
+            PreparedStatement ps = conn.prepareStatement("SELECT * FROM donors WHERE username=? AND password=?");
+            ps.setString(1, user);
+            ps.setString(2, pass);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) {
+                JOptionPane.showMessageDialog(this, "✅ Login Successful! Welcome " + rs.getString("name"));
+                tabs.setSelectedIndex(3);
+            } else {
+                JOptionPane.showMessageDialog(this, "❌ Invalid Credentials!");
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private JPanel donorPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setOpaque(false);
+        panel.add(createHeader("👤 Donor Registration"), BorderLayout.NORTH);
+
+        JPanel form = createFormPanel(6, 2);
+
+        JTextField name = createInputField();
+        JTextField username = createInputField();
+        JPasswordField password = new JPasswordField();
+        JTextField contact = createInputField();
+        JComboBox<String> district = new JComboBox<>(TN_DISTRICTS);
+        JComboBox<String> blood = new JComboBox<>(bloodGroups());
+        JCheckBox agree = new JCheckBox("I agree to donate blood");
+        agree.setOpaque(false);
+
+        form.add(new JLabel("Full Name:")); form.add(name);
+        form.add(new JLabel("Username:")); form.add(username);
+        form.add(new JLabel("Password:")); form.add(password);
+        form.add(new JLabel("Contact:")); form.add(contact);
+        form.add(new JLabel("District:")); form.add(district);
+        form.add(new JLabel("Blood Group:")); form.add(blood);
+        form.add(new JLabel("")); form.add(agree);
+
+        JButton registerBtn = createButton("Register Donor", PRIMARY_RED);
+        registerBtn.addActionListener(e -> registerDonor(
+                name.getText(), username.getText(), new String(password.getPassword()),
+                contact.getText(), district.getSelectedItem().toString(),
+                blood.getSelectedItem().toString(), agree.isSelected()
+        ));
+
+        JPanel bottom = new JPanel();
+        bottom.setOpaque(false);
+        bottom.add(registerBtn);
+
+        panel.add(form, BorderLayout.CENTER);
+        panel.add(bottom, BorderLayout.SOUTH);
+        return panel;
+    }
+
+    private void registerDonor(String name, String username, String pass, String contact, String district, String blood, boolean agree) {
+        if (!agree) {
+            JOptionPane.showMessageDialog(this, "Please agree to donate blood!");
+            return;
+        }
+        try {
+            PreparedStatement ps = conn.prepareStatement(
+                    "INSERT INTO donors(name, username, password, contact, district, bloodgroup) VALUES (?,?,?,?,?,?)");
+            ps.setString(1, name);
+            ps.setString(2, username);
+            ps.setString(3, pass);
+            ps.setString(4, contact);
+            ps.setString(5, district);
+            ps.setString(6, blood);
+            ps.executeUpdate();
+            JOptionPane.showMessageDialog(this, "✅ Donor Registered Successfully!");
+        } catch (SQLException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Error: " + e.getMessage());
+        }
+    }
+
+    private JPanel hospitalStockPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setOpaque(false);
+        panel.add(createHeader("🏥 Blood Stock & Hospital Dashboard"), BorderLayout.NORTH);
+
+        String[] columns = {"District", "Blood Group", "Units"};
+        DefaultTableModel model = new DefaultTableModel(columns, 0);
+        JTable table = new JTable(model);
+        JScrollPane scroll = new JScrollPane(table);
+
+        JComboBox<String> district = new JComboBox<>(TN_DISTRICTS);
+        JComboBox<String> blood = new JComboBox<>(bloodGroups());
+        JTextField units = createInputField();
+        JButton addBtn = createButton("Add/Update Stock", PRIMARY_RED);
+
+        addBtn.addActionListener(e -> {
+            try {
+                PreparedStatement ps = conn.prepareStatement(
+                        "INSERT INTO blood_stock (district, bloodgroup, units) VALUES (?,?,?) " +
+                                "ON CONFLICT(district, bloodgroup) DO UPDATE SET units=excluded.units");
+                ps.setString(1, district.getSelectedItem().toString());
+                ps.setString(2, blood.getSelectedItem().toString());
+                ps.setInt(3, Integer.parseInt(units.getText()));
+                ps.executeUpdate();
+                JOptionPane.showMessageDialog(this, "✅ Stock Updated Successfully!");
+            } catch (SQLException ex) {
+                ex.printStackTrace();
+            }
+        });
+
+        JButton loadBtn = createButton("Load Stock Data", ACCENT_RED);
+        loadBtn.addActionListener(e -> {
+            model.setRowCount(0);
+            try (Statement st = conn.createStatement();
+                 ResultSet rs = st.executeQuery("SELECT * FROM blood_stock")) {
+                while (rs.next()) {
+                    model.addRow(new Object[]{
+                            rs.getString("district"),
+                            rs.getString("bloodgroup"),
+                            rs.getInt("units")
+                    });
+                }
+            } catch (SQLException ex) {
+                ex.printStackTrace();
+            }
+        });
+
+        JPanel top = new JPanel();
+        top.setOpaque(false);
+        top.add(new JLabel("District:")); top.add(district);
+        top.add(new JLabel("Blood Group:")); top.add(blood);
+        top.add(new JLabel("Units:")); top.add(units);
+        top.add(addBtn);
+        top.add(loadBtn);
+
+        panel.add(top, BorderLayout.NORTH);
+        panel.add(scroll, BorderLayout.CENTER);
+        return panel;
+    }
+
+    private JPanel donorSearchPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setOpaque(false);
+        panel.add(createHeader("🔍 Search Donors"), BorderLayout.NORTH);
+
+        JComboBox<String> blood = new JComboBox<>(bloodGroups());
+        JComboBox<String> district = new JComboBox<>(TN_DISTRICTS);
+        JButton search = createButton("Search Donors", PRIMARY_RED);
+
+        String[] columns = {"Name", "District", "Blood Group", "Contact"};
+        DefaultTableModel model = new DefaultTableModel(columns, 0);
+        JTable table = new JTable(model);
+
+        search.addActionListener(e -> {
+            model.setRowCount(0);
+            try {
+                PreparedStatement ps = conn.prepareStatement(
+                        "SELECT name, district, bloodgroup, contact FROM donors WHERE bloodgroup=? AND district=?");
+                ps.setString(1, blood.getSelectedItem().toString());
+                ps.setString(2, district.getSelectedItem().toString());
+                ResultSet rs = ps.executeQuery();
+                while (rs.next()) {
+                    model.addRow(new Object[]{
+                            rs.getString("name"),
+                            rs.getString("district"),
+                            rs.getString("bloodgroup"),
+                            rs.getString("contact")
+                    });
+                }
+            } catch (SQLException ex) {
+                ex.printStackTrace();
+            }
+        });
+
+        JPanel top = new JPanel();
+        top.setOpaque(false);
+        top.add(new JLabel("Blood Group:")); top.add(blood);
+        top.add(new JLabel("District:")); top.add(district);
+        top.add(search);
+
+        panel.add(top, BorderLayout.NORTH);
+        panel.add(new JScrollPane(table), BorderLayout.CENTER);
+        return panel;
+    }
+
+    public static void main(String[] args) {
+        try {
+            UIManager.setLookAndFeel("javax.swing.plaf.nimbus.NimbusLookAndFeel");
+        } catch (Exception ignored) {}
+        SwingUtilities.invokeLater(() -> new TamilNaduBloodLinkSQLite().setVisible(true));
+    }
+}
