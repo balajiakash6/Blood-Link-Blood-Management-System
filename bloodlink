@@ -1,0 +1,758 @@
+import javax.swing.*;
+import javax.swing.border.*;
+import javax.swing.table.DefaultTableModel;
+import java.awt.*;
+import java.awt.event.*;
+import java.sql.*;
+
+public class TamilNaduBloodLinkSQLite extends JFrame {
+    private JTabbedPane tabs;
+    private Connection conn;
+
+    private static final Color PRIMARY_RED = new Color(185, 0, 0);
+    private static final Color ACCENT_RED = new Color(255, 69, 0);
+    private static final Color BACKGROUND_LIGHT = new Color(250, 240, 240);
+
+    private static final String[] TN_DISTRICTS = {
+            "", "Ariyalur", "Chengalpattu", "Chennai", "Coimbatore", "Cuddalore",
+            "Dharmapuri", "Dindigul", "Erode", "Kallakurichi", "Kanchipuram",
+            "Karur", "Krishnagiri", "Madurai", "Mayiladuthurai", "Nagapattinam",
+            "Kanyakumari", "Namakkal", "Perambalur", "Pudukkottai", "Ramanathapuram",
+            "Ranipet", "Salem", "Sivaganga", "Tenkasi", "Thanjavur", "Theni",
+            "Tiruvallur", "Tiruvarur", "Thoothukudi", "Tiruchirappalli",
+            "Tirunelveli", "Tirupathur", "Tiruppur", "Tiruvannamalai",
+            "The Nilgiris", "Vellore", "Viluppuram", "Virudhunagar"
+    };
+
+    private static final String DB_URL = "jdbc:sqlite:bloodlink.db";
+    private String loggedHospital = null;
+    private String loggedDonor = null;
+
+    public TamilNaduBloodLinkSQLite() {
+        setTitle("🩸 Tamil Nadu BloodLink - SQLite Version");
+        getContentPane().setBackground(BACKGROUND_LIGHT);
+        setDefaultCloseOperation(EXIT_ON_CLOSE);
+        setSize(1050, 750);
+        setLocationRelativeTo(null);
+        connectDB();
+        createTablesIfNotExists();
+
+        tabs = new JTabbedPane();
+        tabs.setFont(new Font("Segoe UI", Font.BOLD, 14));
+
+        tabs.addTab("🏠 Start", createStyledPanel(startPanel(), BACKGROUND_LIGHT));
+        tabs.addTab("🔑 Login", createStyledPanel(loginPanel(), new Color(255, 240, 240)));
+        tabs.addTab("👤 Donor Registration", createStyledPanel(donorPanel(), new Color(255, 230, 230)));
+        tabs.addTab("🏥 Hospital Registration", createStyledPanel(hospitalPanel(), new Color(230, 255, 230)));
+        tabs.addTab("🏥 Stock Management", createStyledPanel(hospitalStockPanel(), new Color(240, 255, 240)));
+        
+        tabs.addTab("🔍 Search Hub", createStyledPanel(searchHubPanel(), new Color(240, 240, 255)));
+        tabs.addTab("⚙️ Management", createStyledPanel(userManagementPanel(), new Color(240, 255, 255)));
+
+        updateTabVisibility();
+
+        add(tabs);
+    }
+
+    private void connectDB() {
+        try {
+            Class.forName("org.sqlite.JDBC");
+            conn = DriverManager.getConnection(DB_URL);
+            System.out.println("✅ Connected to SQLite Database!");
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this, "Database connection failed!\n" + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void createTablesIfNotExists() {
+        try (Statement st = conn.createStatement()) {
+            st.execute("CREATE TABLE IF NOT EXISTS donors (" +
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                    "name TEXT, username TEXT UNIQUE, password TEXT, " +
+                    "contact TEXT, district TEXT, bloodgroup TEXT)");
+
+            st.execute("CREATE TABLE IF NOT EXISTS hospitals (" +
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                    "name TEXT, username TEXT UNIQUE, password TEXT, district TEXT)");
+
+            st.execute("CREATE TABLE IF NOT EXISTS blood_stock (" +
+                    "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
+                    "hospital TEXT, district TEXT, bloodgroup TEXT, units INTEGER, " +
+                    "UNIQUE(hospital, bloodgroup))");
+
+            System.out.println("✅ Database schema check complete.");
+        } catch (SQLException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Failed to create database tables: " + e.getMessage(), "DB Setup Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private void updateTabVisibility() {
+        boolean isHospitalLoggedIn = loggedHospital != null;
+        boolean isDonorLoggedIn = loggedDonor != null;
+        boolean isLoggedIn = isHospitalLoggedIn || isDonorLoggedIn;
+
+        tabs.setEnabledAt(4, isHospitalLoggedIn);
+
+        tabs.setEnabledAt(5, isLoggedIn);
+
+        tabs.setEnabledAt(6, isLoggedIn);
+
+        if (!isHospitalLoggedIn && tabs.getSelectedIndex() == 4) tabs.setSelectedIndex(1);
+        if (!isLoggedIn && tabs.getSelectedIndex() >= 5) tabs.setSelectedIndex(1);
+    }
+
+    private JButton createButton(String text, Color color) {
+        JButton btn = new JButton(text);
+        btn.setBackground(color);
+        btn.setForeground(Color.WHITE);
+        btn.setFont(new Font("Segoe UI", Font.BOLD, 15));
+        btn.setFocusPainted(false);
+        btn.setBorder(new CompoundBorder(new LineBorder(color.darker(), 1, true), new EmptyBorder(10, 24, 10, 24)));
+        btn.setCursor(Cursor.getPredefinedCursor(Cursor.HAND_CURSOR));
+        return btn;
+    }
+
+    private JLabel createHeader(String text) {
+        JLabel label = new JLabel(text, SwingConstants.CENTER);
+        label.setFont(new Font("Segoe UI", Font.BOLD, 26));
+        label.setForeground(PRIMARY_RED);
+        label.setBorder(new CompoundBorder(new EmptyBorder(15, 0, 20, 0),
+                new MatteBorder(0, 0, 3, 0, ACCENT_RED)));
+        return label;
+    }
+
+    private JPanel createStyledPanel(JPanel content, Color color) {
+        JPanel panel = new JPanel(new BorderLayout()) {
+            protected void paintComponent(Graphics g) {
+                super.paintComponent(g);
+                Graphics2D g2 = (Graphics2D) g;
+                GradientPaint gp = new GradientPaint(0, 0, color.brighter(), getWidth(), getHeight(), Color.WHITE);
+                g2.setPaint(gp);
+                g2.fillRect(0, 0, getWidth(), getHeight());
+            }
+        };
+        panel.add(content, BorderLayout.CENTER);
+        return panel;
+    }
+
+    private JTextField createInputField() {
+        JTextField field = new JTextField(20);
+        field.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        field.setBorder(new CompoundBorder(new LineBorder(Color.LIGHT_GRAY, 1),
+                new EmptyBorder(8, 10, 8, 10)));
+        return field;
+    }
+
+    private JPanel createFormPanel(int rows, int cols) {
+        JPanel panel = new JPanel(new GridLayout(rows, cols, 15, 15));
+        panel.setOpaque(false);
+        panel.setBorder(new EmptyBorder(40, 200, 40, 200));
+        return panel;
+    }
+
+    private String[] bloodGroups() {
+        return new String[]{"", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"};
+    }
+
+    private JPanel startPanel() {
+        JPanel panel = new JPanel(new GridBagLayout());
+        panel.setOpaque(false);
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(20, 10, 20, 10);
+
+        JLabel icon = new JLabel("💧", SwingConstants.CENTER);
+        icon.setFont(new Font("Segoe UI Symbol", Font.PLAIN, 150));
+        panel.add(icon, gbc);
+
+        gbc.gridy++;
+        JLabel title = new JLabel("Tamil Nadu BloodLink", SwingConstants.CENTER);
+        title.setFont(new Font("Segoe UI", Font.BOLD, 38));
+        title.setForeground(PRIMARY_RED);
+        panel.add(title, gbc);
+
+        gbc.gridy++;
+        JButton startBtn = createButton("Get Started", PRIMARY_RED);
+        startBtn.setPreferredSize(new Dimension(250, 60));
+        startBtn.addActionListener(e -> tabs.setSelectedIndex(1));
+        panel.add(startBtn, gbc);
+        return panel;
+    }
+
+    private JPanel loginPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setOpaque(false);
+        panel.add(createHeader("🔑 User Login"), BorderLayout.NORTH);
+
+        JPanel form = createFormPanel(4, 2);
+        JComboBox<String> roleBox = new JComboBox<>(new String[]{"Donor", "Hospital"});
+        JTextField username = createInputField();
+        JPasswordField password = new JPasswordField();
+        password.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+
+        form.add(new JLabel("Login As:")); form.add(roleBox);
+        form.add(new JLabel("Username:")); form.add(username);
+        form.add(new JLabel("Password:")); form.add(password);
+
+        JButton loginBtn = createButton("Login", PRIMARY_RED);
+        JButton registerBtn = createButton("Register", ACCENT_RED);
+
+        loginBtn.addActionListener(e -> handleLogin(
+                username.getText(), new String(password.getPassword()), (String) roleBox.getSelectedItem()));
+        registerBtn.addActionListener(e -> {
+            if (roleBox.getSelectedItem().equals("Donor")) tabs.setSelectedIndex(2);
+            else tabs.setSelectedIndex(3);
+        });
+
+        form.add(loginBtn); form.add(registerBtn);
+        panel.add(form, BorderLayout.CENTER);
+        return panel;
+    }
+
+    private void handleLogin(String user, String pass, String role) {
+        try {
+            PreparedStatement ps;
+            String nameColumn = "";
+            if (role.equals("Donor")) {
+                ps = conn.prepareStatement("SELECT name FROM donors WHERE username=? AND password=?");
+                nameColumn = "name";
+            } else {
+                ps = conn.prepareStatement("SELECT name FROM hospitals WHERE username=? AND password=?");
+                nameColumn = "name";
+            }
+
+            ps.setString(1, user);
+            ps.setString(2, pass);
+            ResultSet rs = ps.executeQuery();
+
+            if (rs.next()) {
+                String name = rs.getString(nameColumn);
+                JOptionPane.showMessageDialog(this, "✅ Login Successful! Welcome " + name);
+
+                loggedDonor = null;
+                loggedHospital = null;
+
+                if (role.equals("Donor")) {
+                    loggedDonor = name;
+                    tabs.setSelectedIndex(5);
+                } else {
+                    loggedHospital = name;
+                    tabs.setSelectedIndex(4);
+                }
+                updateTabVisibility();
+            } else {
+                JOptionPane.showMessageDialog(this, "❌ Invalid credentials!");
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Database Error during login: " + e.getMessage(), "SQL Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+    private JPanel donorPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setOpaque(false);
+        panel.add(createHeader("👤 Donor Registration"), BorderLayout.NORTH);
+
+        JPanel form = createFormPanel(6, 2);
+        JTextField name = createInputField();
+        JTextField username = createInputField();
+        JPasswordField password = new JPasswordField();
+        JTextField contact = createInputField();
+        JComboBox<String> district = new JComboBox<>(TN_DISTRICTS);
+        JComboBox<String> blood = new JComboBox<>(bloodGroups());
+        JCheckBox agree = new JCheckBox("I agree to donate blood and am eligible.");
+        agree.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        agree.setOpaque(false);
+        agree.setForeground(PRIMARY_RED.darker());
+
+        form.add(new JLabel("Full Name:")); form.add(name);
+        form.add(new JLabel("Username:")); form.add(username);
+        form.add(new JLabel("Password:")); form.add(password);
+        form.add(new JLabel("Contact:")); form.add(contact);
+        form.add(new JLabel("District:")); form.add(district);
+        form.add(new JLabel("Blood Group:")); form.add(blood);
+
+        JButton registerBtn = createButton("Register Donor", PRIMARY_RED);
+        registerBtn.addActionListener(e -> {
+            if (!agree.isSelected()) {
+                JOptionPane.showMessageDialog(this, "Please agree to donate blood!");
+                return;
+            }
+
+            if (name.getText().isEmpty() || username.getText().isEmpty() || new String(password.getPassword()).isEmpty() ||
+                    contact.getText().isEmpty() || district.getSelectedItem().toString().isEmpty() || blood.getSelectedItem().toString().isEmpty()) {
+                JOptionPane.showMessageDialog(this, "All fields are required!", "Input Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            try {
+                PreparedStatement ps = conn.prepareStatement(
+                        "INSERT INTO donors(name, username, password, contact, district, bloodgroup) VALUES (?,?,?,?,?,?)");
+                ps.setString(1, name.getText());
+                ps.setString(2, username.getText());
+                ps.setString(3, new String(password.getPassword()));
+                ps.setString(4, contact.getText());
+                ps.setString(5, district.getSelectedItem().toString());
+                ps.setString(6, blood.getSelectedItem().toString());
+                ps.executeUpdate();
+                JOptionPane.showMessageDialog(this, "✅ Donor Registered Successfully!");
+
+                name.setText("");
+                username.setText("");
+                password.setText("");
+                contact.setText("");
+                district.setSelectedIndex(0);
+                blood.setSelectedIndex(0);
+                agree.setSelected(false);
+                tabs.setSelectedIndex(1);
+
+            } catch (SQLException ex) {
+                if (ex.getMessage().contains("UNIQUE constraint failed")) {
+                    JOptionPane.showMessageDialog(this, "Error: Username already exists. Please choose a different one.", "Registration Error", JOptionPane.ERROR_MESSAGE);
+                } else {
+                    JOptionPane.showMessageDialog(this, "Database Error: " + ex.getMessage(), "SQL Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        });
+
+        JPanel bottom = new JPanel(new GridBagLayout());
+        bottom.setOpaque(false);
+        bottom.setBorder(new EmptyBorder(0, 0, 50, 0));
+
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        gbc.gridwidth = 1;
+        gbc.insets = new Insets(10, 0, 10, 0);
+
+        bottom.add(agree, gbc);
+
+        gbc.gridy = 1;
+        gbc.ipadx = 50;
+        gbc.fill = GridBagConstraints.HORIZONTAL;
+        bottom.add(registerBtn, gbc);
+
+        panel.add(form, BorderLayout.CENTER);
+        panel.add(bottom, BorderLayout.SOUTH);
+        return panel;
+    }
+
+    private JPanel hospitalPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setOpaque(false);
+        panel.add(createHeader("🏥 Hospital Registration"), BorderLayout.NORTH);
+
+        JPanel form = createFormPanel(4, 2);
+        JTextField name = createInputField();
+        JTextField username = createInputField();
+        JPasswordField password = new JPasswordField();
+        JComboBox<String> district = new JComboBox<>(TN_DISTRICTS);
+
+        form.add(new JLabel("Hospital Name:")); form.add(name);
+        form.add(new JLabel("Username:")); form.add(username);
+        form.add(new JLabel("Password:")); form.add(password);
+        form.add(new JLabel("District:")); form.add(district);
+
+        JButton registerBtn = createButton("Register Hospital", PRIMARY_RED);
+        registerBtn.addActionListener(e -> {
+            try {
+                PreparedStatement ps = conn.prepareStatement(
+                        "INSERT INTO hospitals(name, username, password, district) VALUES (?,?,?,?)");
+                ps.setString(1, name.getText());
+                ps.setString(2, username.getText());
+                ps.setString(3, new String(password.getPassword()));
+                ps.setString(4, district.getSelectedItem().toString());
+                ps.executeUpdate();
+                JOptionPane.showMessageDialog(this, "✅ Hospital Registered Successfully!");
+            } catch (SQLException ex) {
+                if (ex.getMessage().contains("UNIQUE constraint failed")) {
+                    JOptionPane.showMessageDialog(this, "Error: Username already exists. Please choose a different one.", "Registration Error", JOptionPane.ERROR_MESSAGE);
+                } else {
+                    JOptionPane.showMessageDialog(this, "Database Error: " + ex.getMessage(), "SQL Error", JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        });
+
+        JPanel bottom = new JPanel();
+        bottom.setOpaque(false);
+        bottom.add(registerBtn);
+        panel.add(form, BorderLayout.CENTER);
+        panel.add(bottom, BorderLayout.SOUTH);
+        return panel;
+    }
+
+    private void loadHospitalStock(DefaultTableModel model) {
+        model.setRowCount(0);
+        if (loggedHospital == null) {
+            JOptionPane.showMessageDialog(this, "Login as hospital to view your stock!");
+            return;
+        }
+        try {
+            PreparedStatement ps = conn.prepareStatement(
+                    "SELECT bloodgroup, units FROM blood_stock WHERE hospital=?");
+            ps.setString(1, loggedHospital);
+            ResultSet rs = ps.executeQuery();
+            while (rs.next()) {
+                model.addRow(new Object[]{
+                        loggedHospital, rs.getString("bloodgroup"), rs.getInt("units")
+                });
+            }
+        } catch (SQLException ex) {
+            ex.printStackTrace();
+            JOptionPane.showMessageDialog(this, "Error loading stock: " + ex.getMessage(), "SQL Error", JOptionPane.ERROR_MESSAGE);
+        }
+    }
+
+
+    private JPanel hospitalStockPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setOpaque(false);
+        panel.add(createHeader("🏥 Hospital Blood Stock"), BorderLayout.NORTH);
+
+        String[] columns = {"Hospital", "Blood Group", "Units"};
+        DefaultTableModel model = new DefaultTableModel(columns, 0);
+        JTable table = new JTable(model);
+
+        JComboBox<String> blood = new JComboBox<>(bloodGroups());
+        JTextField units = createInputField();
+
+        JButton setStockBtn = createButton("Set Total Units", PRIMARY_RED);
+        setStockBtn.addActionListener(e -> {
+            if (loggedHospital == null) {
+                JOptionPane.showMessageDialog(this, "Please login as a hospital to manage stock!");
+                return;
+            }
+
+            int unitValue;
+            try {
+                unitValue = Integer.parseInt(units.getText().trim());
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(this, "Units must be a valid whole number (e.g., 100)!", "Input Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            if (unitValue < 0) {
+                JOptionPane.showMessageDialog(this, "Units cannot be a negative value!", "Input Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            String selectedBloodGroup = blood.getSelectedItem().toString();
+            if (selectedBloodGroup.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Please select a blood group!", "Input Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            try {
+                PreparedStatement check = conn.prepareStatement(
+                        "SELECT units FROM blood_stock WHERE hospital=? AND bloodgroup=?");
+                check.setString(1, loggedHospital);
+                check.setString(2, selectedBloodGroup);
+                ResultSet rs = check.executeQuery();
+
+                if (rs.next()) {
+                    PreparedStatement update = conn.prepareStatement(
+                            "UPDATE blood_stock SET units=? WHERE hospital=? AND bloodgroup=?");
+                    update.setInt(1, unitValue);
+                    update.setString(2, loggedHospital);
+                    update.setString(3, selectedBloodGroup);
+                    update.executeUpdate();
+                } else {
+                    PreparedStatement insert = conn.prepareStatement(
+                            "INSERT INTO blood_stock (hospital, district, bloodgroup, units) VALUES (?,?,?,?)");
+                    insert.setString(1, loggedHospital);
+                    insert.setString(2, getHospitalDistrict(loggedHospital));
+                    insert.setString(3, selectedBloodGroup);
+                    insert.setInt(4, unitValue);
+                    insert.executeUpdate();
+                }
+
+                JOptionPane.showMessageDialog(this, "✅ Stock for " + selectedBloodGroup + " set to " + unitValue + " units Successfully!");
+                loadHospitalStock(model);
+            } catch (SQLException ex) {
+                JOptionPane.showMessageDialog(this, "Database Error: " + ex.getMessage(), "SQL Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        JButton loadBtn = createButton("Load My Stock", ACCENT_RED);
+        loadBtn.addActionListener(e -> loadHospitalStock(model));
+
+        tabs.addChangeListener(e -> {
+            if (tabs.getSelectedIndex() == 4 && loggedHospital != null) {
+                loadHospitalStock(model);
+            }
+        });
+
+
+        JPanel top = new JPanel();
+        top.setOpaque(false);
+        top.add(new JLabel("Blood Group:")); top.add(blood);
+        top.add(new JLabel("Units (Set Total):")); top.add(units);
+        top.add(setStockBtn);
+        top.add(loadBtn);
+
+        panel.add(top, BorderLayout.NORTH);
+        panel.add(new JScrollPane(table), BorderLayout.CENTER);
+        return panel;
+    }
+
+    private String getHospitalDistrict(String hospitalName) {
+        try {
+            PreparedStatement ps = conn.prepareStatement("SELECT district FROM hospitals WHERE name=?");
+            ps.setString(1, hospitalName);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) return rs.getString("district");
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return "";
+    }
+
+    private JPanel searchHubPanel() {
+        JPanel panel = new JPanel(new BorderLayout(0, 10));
+        panel.setOpaque(false);
+        panel.add(createHeader("🔍 Search Hub: Donors and Blood Stock"), BorderLayout.NORTH);
+
+        JTabbedPane searchTabs = new JTabbedPane();
+        searchTabs.setFont(new Font("Segoe UI", Font.BOLD, 14));
+
+        searchTabs.addTab("👤 Donor Search", createDonorSearchPanel());
+        searchTabs.addTab("🏥 Stock Availability Search", createStockSearchPanel());
+
+        panel.add(searchTabs, BorderLayout.CENTER);
+        return panel;
+    }
+
+    private JPanel createDonorSearchPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setOpaque(false);
+
+        JComboBox<String> blood = new JComboBox<>(bloodGroups());
+        JComboBox<String> district = new JComboBox<>(TN_DISTRICTS);
+        JButton search = createButton("Search Donors", PRIMARY_RED);
+
+        String[] columns = {"Name", "District", "Blood Group", "Contact"};
+        DefaultTableModel model = new DefaultTableModel(columns, 0);
+        JTable table = new JTable(model);
+
+        search.addActionListener(e -> {
+            model.setRowCount(0);
+            String selectedBlood = blood.getSelectedItem().toString();
+            String selectedDistrict = district.getSelectedItem().toString();
+
+            if (selectedBlood.isEmpty() || selectedDistrict.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Please select both Blood Group and District for search.");
+                return;
+            }
+
+            try {
+                PreparedStatement ps = conn.prepareStatement(
+                        "SELECT name, district, bloodgroup, contact FROM donors WHERE bloodgroup=? AND district=?");
+                ps.setString(1, selectedBlood);
+                ps.setString(2, selectedDistrict);
+                ResultSet rs = ps.executeQuery();
+                while (rs.next()) {
+                    model.addRow(new Object[]{
+                            rs.getString("name"),
+                            rs.getString("district"),
+                            rs.getString("bloodgroup"),
+                            rs.getString("contact")
+                    });
+                }
+                if (model.getRowCount() == 0) {
+                    JOptionPane.showMessageDialog(this, "No matching donors found in " + selectedDistrict + " for " + selectedBlood + ".");
+                }
+            } catch (SQLException ex) {
+                ex.printStackTrace();
+                JOptionPane.showMessageDialog(this, "Error performing donor search: " + ex.getMessage(), "SQL Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        JPanel top = new JPanel();
+        top.setOpaque(false);
+        top.setBorder(new EmptyBorder(10, 10, 10, 10));
+        top.add(new JLabel("Blood Group:")); top.add(blood);
+        top.add(new JLabel("District:")); top.add(district);
+        top.add(search);
+
+        panel.add(top, BorderLayout.NORTH);
+        panel.add(new JScrollPane(table), BorderLayout.CENTER);
+        return panel;
+    }
+
+    private JPanel createStockSearchPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setOpaque(false);
+
+        JComboBox<String> blood = new JComboBox<>(bloodGroups());
+        JButton search = createButton("Search Hospitals for Stock", ACCENT_RED);
+
+        String[] columns = {"Hospital Name", "District", "Blood Group", "Units Available"};
+        DefaultTableModel model = new DefaultTableModel(columns, 0);
+        JTable table = new JTable(model);
+
+        search.addActionListener(e -> {
+            model.setRowCount(0);
+            String selectedBlood = blood.getSelectedItem().toString();
+
+            if (selectedBlood.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Please select the Blood Group needed for search.");
+                return;
+            }
+
+            try {
+                PreparedStatement ps = conn.prepareStatement(
+                        "SELECT hospital, district, bloodgroup, units FROM blood_stock WHERE bloodgroup=? AND units > 0");
+                ps.setString(1, selectedBlood);
+                ResultSet rs = ps.executeQuery();
+                while (rs.next()) {
+                    model.addRow(new Object[]{
+                            rs.getString("hospital"),
+                            rs.getString("district"),
+                            rs.getString("bloodgroup"),
+                            rs.getInt("units")
+                    });
+                }
+                if (model.getRowCount() == 0) {
+                    JOptionPane.showMessageDialog(this, "No hospitals found with " + selectedBlood + " stock currently.");
+                }
+            } catch (SQLException ex) {
+                ex.printStackTrace();
+                JOptionPane.showMessageDialog(this, "Error performing stock search: " + ex.getMessage(), "SQL Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
+
+        JPanel top = new JPanel();
+        top.setOpaque(false);
+        top.setBorder(new EmptyBorder(10, 10, 10, 10));
+        top.add(new JLabel("Blood Group Needed:")); top.add(blood);
+        top.add(search);
+
+        panel.add(top, BorderLayout.NORTH);
+        panel.add(new JScrollPane(table), BorderLayout.CENTER);
+        return panel;
+    }
+
+    private JPanel donorSearchPanel() {
+        return new JPanel(); 
+    }
+
+    private JPanel userManagementPanel() {
+        JPanel panel = new JPanel(new BorderLayout());
+        panel.setOpaque(false);
+
+        JLabel header = createHeader("⚙️ Account Management");
+        panel.add(header, BorderLayout.NORTH);
+
+        JPanel center = new JPanel(new GridBagLayout());
+        center.setOpaque(false);
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(15, 15, 15, 15);
+        gbc.gridx = 0;
+        gbc.gridy = 0;
+        gbc.anchor = GridBagConstraints.CENTER;
+
+        JLabel statusLabel = new JLabel("Please log in to manage your account.", SwingConstants.CENTER);
+        statusLabel.setFont(new Font("Segoe UI", Font.BOLD, 18));
+        statusLabel.setForeground(PRIMARY_RED);
+        center.add(statusLabel, gbc);
+
+        gbc.gridy++;
+        JButton logoutBtn = createButton("Logout", ACCENT_RED);
+        center.add(logoutBtn, gbc);
+
+        gbc.gridy++;
+        JButton deleteBtn = createButton("Delete My Account", new Color(200, 50, 50));
+        center.add(deleteBtn, gbc);
+
+        panel.add(center, BorderLayout.CENTER);
+
+        logoutBtn.addActionListener(e -> handleLogout());
+        deleteBtn.addActionListener(e -> handleDeleteAccount());
+
+        tabs.addChangeListener(e -> {
+            if (tabs.getSelectedIndex() == 6) {
+                String userStatus;
+                boolean loggedIn = loggedHospital != null || loggedDonor != null;
+
+                if (loggedHospital != null) {
+                    userStatus = "Logged in as Hospital: " + loggedHospital;
+                } else if (loggedDonor != null) {
+                    userStatus = "Logged in as Donor: " + loggedDonor;
+                } else {
+                    userStatus = "Please log in to manage your account.";
+                }
+
+                statusLabel.setText(userStatus);
+                logoutBtn.setVisible(loggedIn);
+                deleteBtn.setVisible(loggedIn);
+            }
+        });
+
+        return panel;
+    }
+
+    private void handleLogout() {
+        loggedHospital = null;
+        loggedDonor = null;
+        updateTabVisibility();
+        JOptionPane.showMessageDialog(this, "✅ Successfully Logged Out! Restricted tabs disabled.");
+        tabs.setSelectedIndex(1);
+    }
+
+    private void handleDeleteAccount() {
+        String nameToDelete = loggedHospital != null ? loggedHospital : loggedDonor;
+        String userType = loggedHospital != null ? "Hospital" : "Donor";
+        String tableName = loggedHospital != null ? "hospitals" : "donors";
+
+        String usernameToDelete = getUsername(nameToDelete, tableName);
+
+
+        if (usernameToDelete == null) {
+            JOptionPane.showMessageDialog(this, "No active user session found to delete.", "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        int confirmation = JOptionPane.showConfirmDialog(this,
+                "Are you sure you want to permanently delete your " + userType + " account (" + nameToDelete + ")?\nThis action cannot be undone.",
+                "Confirm Account Deletion", JOptionPane.YES_NO_OPTION, JOptionPane.WARNING_MESSAGE);
+
+        if (confirmation == JOptionPane.YES_OPTION) {
+            try {
+                PreparedStatement ps = conn.prepareStatement("DELETE FROM " + tableName + " WHERE username=?");
+                ps.setString(1, usernameToDelete);
+                ps.executeUpdate();
+
+                if (userType.equals("Hospital")) {
+                    PreparedStatement psStock = conn.prepareStatement("DELETE FROM blood_stock WHERE hospital=?");
+                    psStock.setString(1, nameToDelete);
+                    psStock.executeUpdate();
+                }
+
+                JOptionPane.showMessageDialog(this, "✅ Your " + userType + " Account has been Permanently Deleted.", "Success", JOptionPane.INFORMATION_MESSAGE);
+                handleLogout();
+            } catch (SQLException e) {
+                JOptionPane.showMessageDialog(this, "Error deleting account: " + e.getMessage(), "SQL Error", JOptionPane.ERROR_MESSAGE);
+                e.printStackTrace();
+            }
+        }
+    }
+
+    private String getUsername(String name, String tableName) {
+        if (name == null) return null;
+        try {
+            PreparedStatement ps = conn.prepareStatement("SELECT username FROM " + tableName + " WHERE name=?");
+            ps.setString(1, name);
+            ResultSet rs = ps.executeQuery();
+            if (rs.next()) return rs.getString("username");
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    public static void main(String[] args) {
+        try { UIManager.setLookAndFeel("javax.swing.plaf.nimbus.NimbusLookAndFeel"); } catch (Exception ignored) {}
+        SwingUtilities.invokeLater(() -> new TamilNaduBloodLinkSQLite().setVisible(true));
+    }
+}
