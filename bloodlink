@@ -11,7 +11,7 @@ public class TamilNaduBloodLinkSQLite extends JFrame {
 
     private static final Color PRIMARY_RED = new Color(185, 0, 0);
     private static final Color ACCENT_RED = new Color(255, 69, 0);
-    private static final Color BACKGROUND_LIGHT = new Color(250, 240, 240);
+    private static final Color BACKGROUND_LIGHT = new Color(235, 245, 255);
 
     private static final String[] TN_DISTRICTS = {
             "", "Ariyalur", "Chengalpattu", "Chennai", "Coimbatore", "Cuddalore",
@@ -45,9 +45,9 @@ public class TamilNaduBloodLinkSQLite extends JFrame {
         tabs.addTab("👤 Donor Registration", createStyledPanel(donorPanel(), new Color(255, 230, 230)));
         tabs.addTab("🏥 Hospital Registration", createStyledPanel(hospitalPanel(), new Color(230, 255, 230)));
         tabs.addTab("🏥 Stock Management", createStyledPanel(hospitalStockPanel(), new Color(240, 255, 240)));
-        
+
         tabs.addTab("🔍 Search Hub", createStyledPanel(searchHubPanel(), new Color(240, 240, 255)));
-        tabs.addTab("⚙️ Management", createStyledPanel(userManagementPanel(), new Color(240, 255, 255)));
+        tabs.addTab("⚙ Management", createStyledPanel(userManagementPanel(), new Color(240, 255, 255)));
 
         updateTabVisibility();
 
@@ -69,7 +69,8 @@ public class TamilNaduBloodLinkSQLite extends JFrame {
             st.execute("CREATE TABLE IF NOT EXISTS donors (" +
                     "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
                     "name TEXT, username TEXT UNIQUE, password TEXT, " +
-                    "contact TEXT, district TEXT, bloodgroup TEXT)");
+                    "contact TEXT, district TEXT, bloodgroup TEXT, " +
+                    "age INTEGER, last_donation_date TEXT)");
 
             st.execute("CREATE TABLE IF NOT EXISTS hospitals (" +
                     "id INTEGER PRIMARY KEY AUTOINCREMENT, " +
@@ -122,6 +123,13 @@ public class TamilNaduBloodLinkSQLite extends JFrame {
         return label;
     }
 
+    private JLabel createLabel(String text) {
+        JLabel label = new JLabel(text);
+        label.setFont(new Font("Segoe UI", Font.BOLD, 14));
+        label.setForeground(new Color(40, 40, 40));
+        return label;
+    }
+
     private JPanel createStyledPanel(JPanel content, Color color) {
         JPanel panel = new JPanel(new BorderLayout()) {
             protected void paintComponent(Graphics g) {
@@ -139,6 +147,7 @@ public class TamilNaduBloodLinkSQLite extends JFrame {
     private JTextField createInputField() {
         JTextField field = new JTextField(20);
         field.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        field.setBackground(new Color(255, 255, 245));
         field.setBorder(new CompoundBorder(new LineBorder(Color.LIGHT_GRAY, 1),
                 new EmptyBorder(8, 10, 8, 10)));
         return field;
@@ -189,10 +198,13 @@ public class TamilNaduBloodLinkSQLite extends JFrame {
         JTextField username = createInputField();
         JPasswordField password = new JPasswordField();
         password.setFont(new Font("Segoe UI", Font.PLAIN, 14));
+        password.setBackground(new Color(255, 255, 245));
+        password.setBorder(new CompoundBorder(new LineBorder(Color.LIGHT_GRAY, 1), new EmptyBorder(8, 10, 8, 10)));
 
-        form.add(new JLabel("Login As:")); form.add(roleBox);
-        form.add(new JLabel("Username:")); form.add(username);
-        form.add(new JLabel("Password:")); form.add(password);
+
+        form.add(createLabel("Login As:")); form.add(roleBox);
+        form.add(createLabel("Username:")); form.add(username);
+        form.add(createLabel("Password:")); form.add(password);
 
         JButton loginBtn = createButton("Login", PRIMARY_RED);
         JButton registerBtn = createButton("Register", ACCENT_RED);
@@ -254,11 +266,16 @@ public class TamilNaduBloodLinkSQLite extends JFrame {
         panel.setOpaque(false);
         panel.add(createHeader("👤 Donor Registration"), BorderLayout.NORTH);
 
-        JPanel form = createFormPanel(6, 2);
+        JPanel form = createFormPanel(8, 2);
         JTextField name = createInputField();
         JTextField username = createInputField();
         JPasswordField password = new JPasswordField();
+        password.setBackground(new Color(255, 255, 245));
+        password.setBorder(new CompoundBorder(new LineBorder(Color.LIGHT_GRAY, 1), new EmptyBorder(8, 10, 8, 10)));
         JTextField contact = createInputField();
+        JTextField age = createInputField();
+        JTextField lastDonation = createInputField();
+
         JComboBox<String> district = new JComboBox<>(TN_DISTRICTS);
         JComboBox<String> blood = new JComboBox<>(bloodGroups());
         JCheckBox agree = new JCheckBox("I agree to donate blood and am eligible.");
@@ -266,12 +283,14 @@ public class TamilNaduBloodLinkSQLite extends JFrame {
         agree.setOpaque(false);
         agree.setForeground(PRIMARY_RED.darker());
 
-        form.add(new JLabel("Full Name:")); form.add(name);
-        form.add(new JLabel("Username:")); form.add(username);
-        form.add(new JLabel("Password:")); form.add(password);
-        form.add(new JLabel("Contact:")); form.add(contact);
-        form.add(new JLabel("District:")); form.add(district);
-        form.add(new JLabel("Blood Group:")); form.add(blood);
+        form.add(createLabel("Full Name:")); form.add(name);
+        form.add(createLabel("Username:")); form.add(username);
+        form.add(createLabel("Password:")); form.add(password);
+        form.add(createLabel("Contact:")); form.add(contact);
+        form.add(createLabel("Age:")); form.add(age);
+        form.add(createLabel("Last Donation (YYYY-MM-DD):")); form.add(lastDonation);
+        form.add(createLabel("District:")); form.add(district);
+        form.add(createLabel("Blood Group:")); form.add(blood);
 
         JButton registerBtn = createButton("Register Donor", PRIMARY_RED);
         registerBtn.addActionListener(e -> {
@@ -280,21 +299,44 @@ public class TamilNaduBloodLinkSQLite extends JFrame {
                 return;
             }
 
-            if (name.getText().isEmpty() || username.getText().isEmpty() || new String(password.getPassword()).isEmpty() ||
-                    contact.getText().isEmpty() || district.getSelectedItem().toString().isEmpty() || blood.getSelectedItem().toString().isEmpty()) {
-                JOptionPane.showMessageDialog(this, "All fields are required!", "Input Error", JOptionPane.ERROR_MESSAGE);
+            String sName = name.getText();
+            String sUser = username.getText();
+            String sPass = new String(password.getPassword());
+            String sContact = contact.getText();
+            String sAge = age.getText();
+            String sLastDonation = lastDonation.getText();
+            String sDistrict = district.getSelectedItem().toString();
+            String sBlood = blood.getSelectedItem().toString();
+
+            if (sName.isEmpty() || sUser.isEmpty() || sPass.isEmpty() || sContact.isEmpty() ||
+                    sAge.isEmpty() || sDistrict.isEmpty() || sBlood.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "All fields (except Last Donation) are required!", "Input Error", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+
+            int ageValue;
+            try {
+                ageValue = Integer.parseInt(sAge);
+                if (ageValue < 18 || ageValue > 65) {
+                    JOptionPane.showMessageDialog(this, "Age must be between 18 and 65.", "Input Error", JOptionPane.ERROR_MESSAGE);
+                    return;
+                }
+            } catch (NumberFormatException ex) {
+                JOptionPane.showMessageDialog(this, "Age must be a valid number.", "Input Error", JOptionPane.ERROR_MESSAGE);
                 return;
             }
 
             try {
                 PreparedStatement ps = conn.prepareStatement(
-                        "INSERT INTO donors(name, username, password, contact, district, bloodgroup) VALUES (?,?,?,?,?,?)");
-                ps.setString(1, name.getText());
-                ps.setString(2, username.getText());
-                ps.setString(3, new String(password.getPassword()));
-                ps.setString(4, contact.getText());
-                ps.setString(5, district.getSelectedItem().toString());
-                ps.setString(6, blood.getSelectedItem().toString());
+                        "INSERT INTO donors(name, username, password, contact, district, bloodgroup, age, last_donation_date) VALUES (?,?,?,?,?,?,?,?)");
+                ps.setString(1, sName);
+                ps.setString(2, sUser);
+                ps.setString(3, sPass);
+                ps.setString(4, sContact);
+                ps.setString(5, sDistrict);
+                ps.setString(6, sBlood);
+                ps.setInt(7, ageValue);
+                ps.setString(8, sLastDonation.isEmpty() ? null : sLastDonation);
                 ps.executeUpdate();
                 JOptionPane.showMessageDialog(this, "✅ Donor Registered Successfully!");
 
@@ -302,6 +344,8 @@ public class TamilNaduBloodLinkSQLite extends JFrame {
                 username.setText("");
                 password.setText("");
                 contact.setText("");
+                age.setText("");
+                lastDonation.setText("");
                 district.setSelectedIndex(0);
                 blood.setSelectedIndex(0);
                 agree.setSelected(false);
@@ -347,12 +391,14 @@ public class TamilNaduBloodLinkSQLite extends JFrame {
         JTextField name = createInputField();
         JTextField username = createInputField();
         JPasswordField password = new JPasswordField();
+        password.setBackground(new Color(255, 255, 245));
+        password.setBorder(new CompoundBorder(new LineBorder(Color.LIGHT_GRAY, 1), new EmptyBorder(8, 10, 8, 10)));
         JComboBox<String> district = new JComboBox<>(TN_DISTRICTS);
 
-        form.add(new JLabel("Hospital Name:")); form.add(name);
-        form.add(new JLabel("Username:")); form.add(username);
-        form.add(new JLabel("Password:")); form.add(password);
-        form.add(new JLabel("District:")); form.add(district);
+        form.add(createLabel("Hospital Name:")); form.add(name);
+        form.add(createLabel("Username:")); form.add(username);
+        form.add(createLabel("Password:")); form.add(password);
+        form.add(createLabel("District:")); form.add(district);
 
         JButton registerBtn = createButton("Register Hospital", PRIMARY_RED);
         registerBtn.addActionListener(e -> {
@@ -475,7 +521,34 @@ public class TamilNaduBloodLinkSQLite extends JFrame {
         });
 
         JButton loadBtn = createButton("Load My Stock", ACCENT_RED);
-        loadBtn.addActionListener(e -> loadHospitalStock(model));
+        loadBtn.addActionListener(e -> {
+            if (loggedHospital == null) {
+                JOptionPane.showMessageDialog(this, "Please login as a hospital!");
+                return;
+            }
+            String selectedBloodGroup = blood.getSelectedItem().toString();
+            if (selectedBloodGroup.isEmpty()) {
+                JOptionPane.showMessageDialog(this, "Please select a blood group to check its stock!");
+                return;
+            }
+
+            try {
+                PreparedStatement ps = conn.prepareStatement(
+                        "SELECT units FROM blood_stock WHERE hospital=? AND bloodgroup=?");
+                ps.setString(1, loggedHospital);
+                ps.setString(2, selectedBloodGroup);
+                ResultSet rs = ps.executeQuery();
+
+                if (rs.next()) {
+                    units.setText(String.valueOf(rs.getInt("units")));
+                } else {
+                    units.setText("0");
+                    JOptionPane.showMessageDialog(this, "No stock found for " + selectedBloodGroup + ". You can set it to 0 or more.");
+                }
+            } catch (SQLException ex) {
+                JOptionPane.showMessageDialog(this, "Database Error checking stock: " + ex.getMessage(), "SQL Error", JOptionPane.ERROR_MESSAGE);
+            }
+        });
 
         tabs.addChangeListener(e -> {
             if (tabs.getSelectedIndex() == 4 && loggedHospital != null) {
@@ -486,8 +559,8 @@ public class TamilNaduBloodLinkSQLite extends JFrame {
 
         JPanel top = new JPanel();
         top.setOpaque(false);
-        top.add(new JLabel("Blood Group:")); top.add(blood);
-        top.add(new JLabel("Units (Set Total):")); top.add(units);
+        top.add(createLabel("Blood Group:")); top.add(blood);
+        top.add(createLabel("Units (Set Total):")); top.add(units);
         top.add(setStockBtn);
         top.add(loadBtn);
 
@@ -571,8 +644,8 @@ public class TamilNaduBloodLinkSQLite extends JFrame {
         JPanel top = new JPanel();
         top.setOpaque(false);
         top.setBorder(new EmptyBorder(10, 10, 10, 10));
-        top.add(new JLabel("Blood Group:")); top.add(blood);
-        top.add(new JLabel("District:")); top.add(district);
+        top.add(createLabel("Blood Group:")); top.add(blood);
+        top.add(createLabel("District:")); top.add(district);
         top.add(search);
 
         panel.add(top, BorderLayout.NORTH);
@@ -625,7 +698,7 @@ public class TamilNaduBloodLinkSQLite extends JFrame {
         JPanel top = new JPanel();
         top.setOpaque(false);
         top.setBorder(new EmptyBorder(10, 10, 10, 10));
-        top.add(new JLabel("Blood Group Needed:")); top.add(blood);
+        top.add(createLabel("Blood Group Needed:")); top.add(blood);
         top.add(search);
 
         panel.add(top, BorderLayout.NORTH);
@@ -634,14 +707,14 @@ public class TamilNaduBloodLinkSQLite extends JFrame {
     }
 
     private JPanel donorSearchPanel() {
-        return new JPanel(); 
+        return new JPanel();
     }
 
     private JPanel userManagementPanel() {
         JPanel panel = new JPanel(new BorderLayout());
         panel.setOpaque(false);
 
-        JLabel header = createHeader("⚙️ Account Management");
+        JLabel header = createHeader("⚙ Management");
         panel.add(header, BorderLayout.NORTH);
 
         JPanel center = new JPanel(new GridBagLayout());
